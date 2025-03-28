@@ -1,11 +1,12 @@
-version: '3.8'
-
 services:
-  backend:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+  frontend:
+    image: nginx
     volumes:
-      - .:/app
+      - ./frontend:/usr/share/nginx/html:ro
+    ports:
+      - "80:80"
+    command: >
+      /bin/sh -c "
+      chmod -R 755 /usr/share/nginx/html && 
+      nginx -g 'daemon off;'
+      "
