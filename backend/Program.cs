@@ -1,6 +1,7 @@
 using LaLigaTrackerBackend.Models;
 using LaLigaTrackerBackend.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -8,13 +9,29 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     EnvironmentName = Environments.Development
 });
 
-// Explicit port configuration
-builder.WebHost.ConfigureKestrel(serverOptions =>
+
+builder.WebHost.ConfigureKestrel(serverOptions => 
 {
     serverOptions.ListenLocalhost(8080);
 });
 
-// Services configuration
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "LaLiga Tracker API",
+        Version = "v1",
+        Description = "API para gestión de partidos de fútbol",
+        Contact = new OpenApiContact
+        {
+            Name = "Tu Nombre",
+            Email = "tu@email.com"
+        }
+    });
+});
+
+// Configuración CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -25,45 +42,74 @@ builder.Services.AddCors(options =>
     });
 });
 
-// SQLite configuration
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=matches.db"));
 
 var app = builder.Build();
 
-// Middleware pipeline
+// Middleware
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c => 
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "LaLiga API v1");
+    });
+}
+
 app.UseCors("AllowAll");
 
-// Database initialization
+// Inicialización de la base de datos
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    
+    // Datos iniciales de ejemplo
+    if (!db.Matches.Any())
+    {
+        db.Matches.Add(new Match {
+            HomeTeam = "Real Madrid",
+            AwayTeam = "Barcelona",
+            MatchDate = DateTime.Now.AddDays(7).ToString("yyyy-MM-dd")
+        });
+        await db.SaveChangesAsync();
+    }
 }
 
-// API Endpoints
+// Endpoints
 var matches = app.MapGroup("/api/matches");
 
-// GET all matches
+// GET todos los partidos
 matches.MapGet("/", async (AppDbContext db) => 
-    await db.Matches.ToListAsync());
+    await db.Matches.ToListAsync())
+    .WithTags("Partidos")
+    .WithName("GetAllMatches")
+    .WithOpenApi();
 
-// GET match by ID
+// GET partido por ID
 matches.MapGet("/{id}", async (int id, AppDbContext db) =>
 {
     var match = await db.Matches.FindAsync(id);
     return match is null ? Results.NotFound() : Results.Ok(match);
-});
+})
+.WithTags("Partidos")
+.WithName("GetMatchById")
+.WithOpenApi();
 
-// POST new match
+// POST nuevo partido
 matches.MapPost("/", async (Match newMatch, AppDbContext db) =>
 {
     db.Matches.Add(newMatch);
     await db.SaveChangesAsync();
     return Results.Created($"/api/matches/{newMatch.Id}", newMatch);
-});
+})
+.WithTags("Partidos")
+.WithName("CreateMatch")
+.WithOpenApi();
 
-// PUT update match
+// PUT actualizar partido
 matches.MapPut("/{id}", async (int id, Match updatedMatch, AppDbContext db) =>
 {
     var existingMatch = await db.Matches.FindAsync(id);
@@ -75,9 +121,12 @@ matches.MapPut("/{id}", async (int id, Match updatedMatch, AppDbContext db) =>
     
     await db.SaveChangesAsync();
     return Results.Ok(existingMatch);
-});
+})
+.WithTags("Partidos")
+.WithName("UpdateMatch")
+.WithOpenApi();
 
-// DELETE match
+// DELETE partido
 matches.MapDelete("/{id}", async (int id, AppDbContext db) =>
 {
     var match = await db.Matches.FindAsync(id);
@@ -86,7 +135,10 @@ matches.MapDelete("/{id}", async (int id, AppDbContext db) =>
     db.Matches.Remove(match);
     await db.SaveChangesAsync();
     return Results.NoContent();
-});
+})
+.WithTags("Partidos")
+.WithName("DeleteMatch")
+.WithOpenApi();
 
 // PATCH operations
 matches.MapPatch("/{id}/goals", async (int id, AppDbContext db) =>
@@ -99,9 +151,13 @@ matches.MapPatch("/{id}/goals", async (int id, AppDbContext db) =>
     
     return Results.Ok(new { 
         Message = "Gol registrado correctamente",
-        Goals = match.Goals 
+        MatchId = match.Id,
+        CurrentGoals = match.Goals
     });
-});
+})
+.WithTags("Eventos")
+.WithName("RegisterGoal")
+.WithOpenApi();
 
 matches.MapPatch("/{id}/yellowcards", async (int id, AppDbContext db) =>
 {
@@ -113,9 +169,13 @@ matches.MapPatch("/{id}/yellowcards", async (int id, AppDbContext db) =>
     
     return Results.Ok(new { 
         Message = "Tarjeta amarilla registrada",
-        YellowCards = match.YellowCards 
+        MatchId = match.Id,
+        CurrentYellowCards = match.YellowCards
     });
-});
+})
+.WithTags("Eventos")
+.WithName("RegisterYellowCard")
+.WithOpenApi();
 
 matches.MapPatch("/{id}/redcards", async (int id, AppDbContext db) =>
 {
@@ -127,9 +187,13 @@ matches.MapPatch("/{id}/redcards", async (int id, AppDbContext db) =>
     
     return Results.Ok(new { 
         Message = "Tarjeta roja registrada",
-        RedCards = match.RedCards 
+        MatchId = match.Id,
+        CurrentRedCards = match.RedCards
     });
-});
+})
+.WithTags("Eventos")
+.WithName("RegisterRedCard")
+.WithOpenApi();
 
 matches.MapPatch("/{id}/extratime", async (int id, int minutes, AppDbContext db) =>
 {
@@ -141,11 +205,15 @@ matches.MapPatch("/{id}/extratime", async (int id, int minutes, AppDbContext db)
     
     return Results.Ok(new { 
         Message = $"Tiempo extra actualizado a {minutes} minutos",
-        ExtraTime = match.ExtraTimeMinutes 
+        MatchId = match.Id,
+        ExtraTimeMinutes = match.ExtraTimeMinutes
     });
-});
+})
+.WithTags("Eventos")
+.WithName("SetExtraTime")
+.WithOpenApi();
 
-// Error handling middleware
+// Middleware de manejo de errores
 app.Use(async (context, next) =>
 {
     try
@@ -155,7 +223,8 @@ app.Use(async (context, next) =>
     catch (Exception ex)
     {
         Console.WriteLine($"Error: {ex}");
-        throw;
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsync("Ocurrió un error interno. Por favor intente nuevamente.");
     }
 });
 
