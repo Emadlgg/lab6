@@ -1,0 +1,12 @@
+API LaLiga Tracker - Guía para LLMs
+
+Endpoints disponibles:
+1. GET /api/matches - Listar todos los partidos
+2. POST /api/matches - Crear nuevo partido
+3. PATCH /api/matches/{id}/goals - Registrar gol
+4. PATCH /api/matches/{id}/yellowcards - Registrar tarjeta amarilla
+5. PATCH /api/matches/{id}/redcards - Registrar tarjeta roja
+6. PATCH /api/matches/{id}/extratime - Establecer tiempo extra
+
+Ejemplo de uso para registrar gol:
+PATCH http://localhost:8080/api/matches/1/goals
